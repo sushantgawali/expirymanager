@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import errno
 import os
 import stat
 from pathlib import Path
@@ -197,6 +198,48 @@ class TestPrivateFileAssertion:
         with pytest.raises(PathsError) as excinfo:
             assert_private_file(secret)
         assert "synthetic-key-material" not in str(excinfo.value)
+
+
+class TestLockHeldErrnos:
+    """The lock-contention errno set must be built from names that exist on this platform.
+
+    Naming errno.EDEADLOCK directly raised AttributeError at import on macOS, which defines only
+    EDEADLK, so the whole application failed to start before any of its own code ran.
+    """
+
+    def test_the_set_is_non_empty_and_holds_the_posix_contention_codes(self) -> None:
+        assert errno.EACCES in paths_module._LOCK_HELD_ERRNOS
+        assert errno.EAGAIN in paths_module._LOCK_HELD_ERRNOS
+
+    def test_whichever_deadlock_spelling_this_platform_has_is_included(self) -> None:
+        present = [
+            code
+            for code in (getattr(errno, "EDEADLOCK", None), getattr(errno, "EDEADLK", None))
+            if code is not None
+        ]
+        assert present, "no deadlock errno on this platform at all"
+        for code in present:
+            assert code in paths_module._LOCK_HELD_ERRNOS
+
+    def test_no_duplicates_when_both_spellings_are_the_same_number(self) -> None:
+        codes = paths_module._LOCK_HELD_ERRNOS
+        assert len(codes) == len(set(codes))
+
+    def test_the_module_never_names_a_deadlock_errno_directly(self) -> None:
+        """A direct attribute reference is what broke macOS; keep the lookup defensive."""
+        source = (Path(paths_module.__file__)).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Attribute)
+                and node.attr in {"EDEADLOCK", "EDEADLK"}
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "errno"
+            ):
+                raise AssertionError(
+                    f"errno.{node.attr} is referenced directly at line {node.lineno}; "
+                    "use getattr so the import survives platforms that lack the name"
+                )
 
 
 class TestInstanceLock:

@@ -340,7 +340,24 @@ _LOCK_REGION_BYTES = 1
 
 # What each platform reports when another process already holds the lock. POSIX flock raises
 # EAGAIN (EACCES on some systems); msvcrt raises EACCES, and EDEADLOCK when it gives up retrying.
-_LOCK_HELD_ERRNOS = (errno.EACCES, errno.EAGAIN, errno.EDEADLOCK)
+#
+# The name is looked up rather than written, because the errno module does not carry the same
+# names everywhere: macOS defines EDEADLK and no EDEADLOCK, so naming the Windows spelling
+# directly raised AttributeError at import and the app could not start at all on a Mac. Both
+# spellings are collected where they exist; on Linux they are the same number and the dedupe
+# below keeps the tuple honest.
+_LOCK_HELD_ERRNOS = tuple(
+    dict.fromkeys(
+        code
+        for code in (
+            errno.EACCES,
+            errno.EAGAIN,
+            getattr(errno, "EDEADLOCK", None),
+            getattr(errno, "EDEADLK", None),
+        )
+        if code is not None
+    )
+)
 
 
 def _take_exclusive_lock(fd: int) -> None:
