@@ -80,7 +80,17 @@ function useConnectFyers() {
 
   const start = useCallback(() => {
     setAuthorizeUrl(null)
-    pendingTabRef.current = window.open('', '_blank', 'noopener,noreferrer')
+    // Deliberately WITHOUT noopener: it makes window.open return null, which loses the handle
+    // and leaves a blank tab that never navigates. The opener is cleared by hand instead.
+    const tab = window.open('', '_blank')
+    if (tab) {
+      try {
+        tab.opener = null
+      } catch {
+        // Cross origin once navigated, and not worth failing the login over.
+      }
+    }
+    pendingTabRef.current = tab
     mutation.mutate()
   }, [mutation])
 

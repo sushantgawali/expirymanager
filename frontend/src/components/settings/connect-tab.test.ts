@@ -18,6 +18,25 @@ const source = fs.readFileSync(
   'utf8',
 )
 
+// Every component that starts the Fyers login through a pre-opened tab.
+const connectTabSources = {
+  BrokerPanel: source,
+  TokenBanner: fs.readFileSync(
+    path.join(import.meta.dirname, '..', 'common', 'TokenBanner.tsx'),
+    'utf8',
+  ),
+}
+
+describe.each(Object.entries(connectTabSources))('%s window.open', (_name, text) => {
+  it('does not ask for noopener on the tab it needs to navigate', () => {
+    const calls = text.match(/window\.open\([^)]*\)/g) ?? []
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls) {
+      expect(call).not.toContain('noopener')
+    }
+  })
+})
+
 describe('the Fyers connect tab', () => {
   it('does not ask for noopener on the tab it needs to navigate', () => {
     // Matches window.open(...) calls and checks none of them request noopener. The feature is
